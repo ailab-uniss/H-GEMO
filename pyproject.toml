@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "hgemo-repro"
+version = "1.0.0"
+description = "Reproducibility package for H-GEMO: Hypergraph-Enhanced Multi-Objective Evolutionary Feature Selection"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-learn>=1.2",
+    "scikit-multilearn>=0.2.0",
+    "networkx>=3.0",
+    "pyyaml>=6.0",
+    "joblib>=1.2",
+]
+
+[project.optional-dependencies]
+gpu = ["torch>=2.0"]
+
+[project.scripts]
+hgemo = "hgemo.cli:main"

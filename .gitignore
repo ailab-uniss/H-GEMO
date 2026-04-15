@@ -1,0 +1,27 @@
+# Byte-compiled / optimised
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+.venv/
+venv/
+
+# Run outputs (large, not versioned)
+runs/
+
+# Datasets: only Emotions is included for smoke-testing.
+# Place additional datasets in data/dense_benchmark_v3/<NAME>/
+data/dense_benchmark_v3/*
+!data/dense_benchmark_v3/Emotions/
+data/cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

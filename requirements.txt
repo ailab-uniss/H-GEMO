@@ -1,0 +1,12 @@
+# Reproducibility requirements for H-GEMO
+# Python >= 3.10 required
+numpy>=1.24
+scipy>=1.10
+scikit-learn>=1.2
+scikit-multilearn>=0.2.0
+networkx>=3.0
+pyyaml>=6.0
+joblib>=1.2
+# PyTorch: install separately via https://pytorch.org/get-started/
+# e.g.  pip install torch --index-url https://download.pytorch.org/whl/cu121
+# or    pip install torch --index-url https://download.pytorch.org/whl/cpu
