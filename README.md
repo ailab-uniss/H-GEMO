@@ -1,16 +1,23 @@
-# H-GEMO – Reproducibility Package
+# H-GEMO
 
 > **Hypergraph-Enhanced Multi-Objective Evolutionary Feature Selection
 > for Multi-Label Classification**
 
-This repository contains the **minimal, self-contained code** needed to
-reproduce every experiment reported in the paper.  All features not used
-in the published results have been stripped to keep the codebase auditable
-and easy to follow.
+H-GEMO is a novel **Multi-Objective Evolutionary Feature Selection (MLFS)** framework for **Multi-Label Classification** that models the feature search space using the expressive power of **hypergraphs**. 
+
+In conventional feature selection, representing subsets of features via simple bitstrings fails to capture the complex, higher-order relationships between features and multiple labels. H-GEMO represents candidate feature subsets as hypergraphs, enabling the evolutionary algorithm to guide the search process more efficiently and robustly by understanding which groups of features jointly predict subsets of labels.
+
+This repository serves as a highly optimized, fully functional, and extensible MLFS toolkit.
+
+## ✨ Key Features
+- **Hypergraph-based Evolutionary Search:** Uses hypergraph structures as genotypes to preserve, recombine, and mutate feature groups based on label correlations.
+- **Multi-Objective Optimization:** Based on NSGA-II to simultaneously maximize predictive performance (e.g., Macro F1, Micro F1) while strongly minimizing the ratio of selected features.
+- **GPU-Accelerated ML-kNN:** Features a highly optimized PyTorch implementation of the ML-kNN algorithm to drastically speed up fitness evaluations throughout the evolutionary process.
+- **Configurable & Transparent:** Easily integrates with custom datasets, natively supports various similarity metrics, and allows deep configuration via YAML files.
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 # 1. Create a virtual environment and install dependencies
