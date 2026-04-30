@@ -1,9 +1,9 @@
 # H-GEMO
 
-> **Hypergraph-Enhanced Multi-Objective Evolutionary Feature Selection
-> for Multi-Label Classification**
+> **H-GEMO: Template-Based Hypergraph Genotypes for Multi-Objective
+> Multi-Label Feature Selection**
 
-H-GEMO is a novel **Multi-Objective Evolutionary Feature Selection (MLFS)** framework for **Multi-Label Classification** that models the feature search space using the expressive power of **hypergraphs**. 
+H-GEMO is a novel **Multi-Objective Multi-Label Feature Selection (MLFS)** framework that models the feature search space using **template-based hypergraph genotypes**. 
 
 In conventional feature selection, representing subsets of features via simple bitstrings fails to capture the complex, higher-order relationships between features and multiple labels. H-GEMO represents candidate feature subsets as hypergraphs, enabling the evolutionary algorithm to guide the search process more efficiently and robustly by understanding which groups of features jointly predict subsets of labels.
 
@@ -290,9 +290,9 @@ MIT License.  See the main repository for full terms.
 If you use this code, please cite:
 
 ```bibtex
-@article{hgemo2025,
-  title   = {Hypergraph-Enhanced Multi-Objective Evolutionary Feature
-             Selection for Multi-Label Classification},
-  year    = {2025}
+@article{hgemo2026,
+  title   = {H-GEMO: Template-Based Hypergraph Genotypes for
+             Multi-Objective Multi-Label Feature Selection},
+  year    = {2026}
 }
 ```

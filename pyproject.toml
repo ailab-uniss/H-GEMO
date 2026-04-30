@@ -5,7 +5,7 @@ build-backend = "setuptools.backends._legacy:_Backend"
 [project]
 name = "hgemo-repro"
 version = "1.0.0"
-description = "Reproducibility package for H-GEMO: Hypergraph-Enhanced Multi-Objective Evolutionary Feature Selection"
+description = "Reproducibility package for H-GEMO: Template-Based Hypergraph Genotypes for Multi-Objective Multi-Label Feature Selection"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = [
