@@ -46,6 +46,8 @@ REQUIRED_FILES=(
     configs/smoke.yaml
     requirements.txt
     README.md
+    scripts/prepare_datasets.sh
+    data/dense_benchmark_v3/paper_datasets.zip
 )
 
 for f in "${REQUIRED_FILES[@]}"; do

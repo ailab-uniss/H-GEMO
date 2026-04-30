@@ -40,10 +40,21 @@
 | File                     | Description                                  |
 |--------------------------|----------------------------------------------|
 | `create_venv.sh`         | Create virtual environment + install deps    |
+| `prepare_datasets.sh`    | Extract the 20-dataset zip archive in place  |
 | `launch_bench.sh`        | Run main 20-dataset benchmark                |
 | `launch_bitstring.sh`    | Run bitstring ablation                       |
 | `launch_sensitivity.sh`  | Run all sensitivity analyses                 |
 | `check_bundle.sh`        | Verify bundle integrity + optional smoke     |
+
+## Datasets (`data/dense_benchmark_v3/`)
+
+| File / dir                       | Description                                          |
+|----------------------------------|------------------------------------------------------|
+| `Emotions/`                      | Pre-extracted dataset for the smoke test (~2.6 MB)   |
+| `paper_datasets.zip`             | All 20 paper benchmark datasets (~22 MB, 200 .npz)   |
+
+Run `bash scripts/prepare_datasets.sh` to extract the archive into the
+layout `<NAME>/foldK/{trainval,test}.npz` expected by the loader.
 
 ## Metadata
 
