@@ -2,25 +2,19 @@
 __pycache__/
 *.py[cod]
 *.so
+*.egg-info/
 
 # Virtual environment
 .venv/
 venv/
 
-# Run outputs (large, not versioned)
+# Run outputs
 runs/
 
-# Datasets:
-#   - The 20 paper benchmark datasets are shipped as a single zip archive
-#       data/dense_benchmark_v3/paper_datasets.zip   (~22 MB, 200 .npz files)
-#     Extract it with `bash scripts/prepare_datasets.sh` (idempotent).
-#   - Emotions is also kept extracted in-tree for the smoke test.
-#   - Any additional / extracted datasets are git-ignored so they do not
-#     bloat the repo.
-data/dense_benchmark_v3/*
-!data/dense_benchmark_v3/Emotions/
-!data/dense_benchmark_v3/paper_datasets.zip
-data/cache/
+# Datasets: only the Emotions demo dataset is versioned.
+# Put your own datasets under data/<NAME>/foldK/{trainval,test}.npz
+data/*
+!data/Emotions/
 
 # IDE
 .vscode/

@@ -1,11 +1,11 @@
 """Command-line interface.
 
-The only entry-point used in the paper is::
+Entry point::
 
     python -m hgemo.cli run --config <yaml> [--fold-idx K]
 
-which runs a single fold of a single configuration file.  The launch
-scripts iterate over datasets and folds externally.
+which runs a single fold of a single configuration file.  To run a
+full cross-validation, loop over the folds externally.
 """
 from __future__ import annotations
 
