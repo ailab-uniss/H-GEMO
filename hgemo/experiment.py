@@ -4,7 +4,7 @@
 
 1. Load pre-folded dataset (train / val / test).
 2. Build the ML-kNN evaluator with tri-objective scoring.
-3. Construct the hypergraph template (or bitstring config).
+3. Construct the hypergraph template.
 4. Run NSGA-II with sliding-window early stopping on HV.
 5. Save Pareto front, population masks, and test-set metrics.
 
@@ -24,11 +24,8 @@ from scipy import sparse
 from .config import Paths, get, load_config
 from .datasets import load_dataset
 from .genotypes import (
-    BitstringConfig,
     HypergraphConfig,
     HypergraphGenome,
-    bitstring_crossover,
-    bitstring_mutate,
     build_feat_edge_membership,
     build_feature_similarity,
     clone_hypergraph,
@@ -36,7 +33,6 @@ from .genotypes import (
     hyperedge_composite_mutation,
     repair_hypergraph,
     hypergraph_to_feature_mask,
-    init_bitstring,
     init_hypergraph,
     build_hyperedges_multilayer,
 )
@@ -84,18 +80,6 @@ def _p95_null_cosine(n_labels: int) -> float:
 # ═══════════════════════════════════════════════════════════════════
 # Variation adapters (bridge genotype operators → NSGA-II protocol)
 # ═══════════════════════════════════════════════════════════════════
-
-class BitstringVariation(Variation):
-    """Variation operator for the flat bitstring genotype."""
-    def __init__(self, cfg: BitstringConfig) -> None:
-        self.cfg = cfg
-
-    def crossover(self, a: object, b: object, rng: np.random.Generator) -> tuple[object, object]:
-        return bitstring_crossover(np.asarray(a, dtype=bool), np.asarray(b, dtype=bool), rng)
-
-    def mutate(self, a: object, rng: np.random.Generator) -> object:
-        return bitstring_mutate(np.asarray(a, dtype=bool), self.cfg, rng)
-
 
 class HypergraphVariation(Variation):
     """Variation operator for the hypergraph genotype.
@@ -228,25 +212,7 @@ def run_experiment_from_config(config: dict[str, Any], fold_idx: int | None = No
     counts = {"real": 0}
 
     # ── Genotype setup ────────────────────────────────────────────
-    if genotype_kind == "bitstring":
-        bcfg = BitstringConfig(
-            init_prob=float(get(config, "bitstring.init_prob", 0.1)),
-            bitflip_prob=float(get(config, "bitstring.bitflip_prob", 1.0 / max(1, n_features))),
-            bitflip_prob_on=get(config, "bitstring.bitflip_prob_on", None),
-            bitflip_prob_off=get(config, "bitstring.bitflip_prob_off", None),
-        )
-        variation: Variation = BitstringVariation(bcfg)
-
-        def init_pop(rng: np.random.Generator) -> list[object]:
-            return [init_bitstring(n_features, bcfg, rng) for _ in range(pop_size)]
-
-        def to_mask(genome: object) -> np.ndarray:
-            m = np.asarray(genome, dtype=bool)
-            if m.sum() == 0:
-                m = m.copy(); m[0] = True
-            return m
-
-    elif genotype_kind == "hypergraph":
+    if genotype_kind == "hypergraph":
         hcfg = HypergraphConfig(
             construction=str(get(config, "hypergraph.construction", "multilayer_label")),
             fl_relevance=str(get(config, "hypergraph.fl_relevance", "mi")),
@@ -305,7 +271,7 @@ def run_experiment_from_config(config: dict[str, Any], fold_idx: int | None = No
         def to_mask(genome: object) -> np.ndarray:
             return hypergraph_to_feature_mask(genome, n_features=n_features)
     else:
-        raise ValueError(f"Unsupported genotype: {genotype_kind!r} (bitstring | hypergraph)")
+        raise ValueError(f"Unsupported genotype: {genotype_kind!r} (only 'hypergraph' is supported)")
 
     # ── Evaluate function ─────────────────────────────────────────
     def evaluate(genome: object) -> tuple[np.ndarray, dict[str, object]]:

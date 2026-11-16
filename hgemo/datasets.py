@@ -3,14 +3,14 @@
 The paper uses ``dataset.kind = "prefold"`` exclusively.  Each dataset
 lives in a directory tree::
 
-    data/dense_benchmark_v3/<Name>/fold0/trainval.npz
-                                   fold0/test.npz
-                                   ...
-                                   fold4/trainval.npz
-                                   fold4/test.npz
+    data/<Name>/fold0/trainval.npz
+                fold0/test.npz
+                ...
+                fold4/trainval.npz
+                fold4/test.npz
 
 where each ``.npz`` file contains dense arrays ``X`` (float32) and
-``Y`` (int8, binary indicators).
+``Y`` (integer, binary indicators).
 
 The trainval split is further divided into train / val using
 scikit-multilearn's :class:`IterativeStratification` to ensure
@@ -140,7 +140,7 @@ def load_dataset(
     name = dataset_cfg.get("name")
     if not name:
         raise ValueError("dataset.name is required.")
-    root = Path(dataset_cfg.get("root", "data/dense_benchmark_v3"))
+    root = Path(dataset_cfg.get("root", "data"))
     fold_root = root / name
 
     cv_cfg = config.get("cross_validation", {})

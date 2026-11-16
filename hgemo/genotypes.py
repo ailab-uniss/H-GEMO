@@ -1,11 +1,9 @@
 """Genotype representations used by H-GEMO.
 
-This module implements the two genotypes evaluated in the paper:
-
-1. **Bitstring** — Standard binary mask (used for the ablation study).
-2. **Hypergraph** — Multilayer-label hypergraph construction with
-   MI-based feature–label relevance, Jaccard label–label similarity,
-   KMeans feature-cluster edges, and composite mutation.
+This module implements the template-based hypergraph genotype:
+multilayer-label hypergraph construction with MI-based feature–label
+relevance, Jaccard label–label similarity, KMeans feature-cluster edges,
+and composite mutation.
 
 Only the ``multilayer_label`` construction mode is included (the only
 mode used in the published experiments).
@@ -26,15 +24,6 @@ from joblib import Parallel, delayed
 # ═══════════════════════════════════════════════════════════════════
 # §1  Configuration dataclasses
 # ═══════════════════════════════════════════════════════════════════
-
-@dataclass(frozen=True)
-class BitstringConfig:
-    """Parameters for the bitstring genotype (ablation baseline)."""
-    init_prob: float = 0.1            # probability each feature is ON at init
-    bitflip_prob: float = 0.01        # symmetric per-bit flip probability
-    bitflip_prob_on: float | None = None   # asymmetric 1→0 flip (overrides bitflip_prob)
-    bitflip_prob_off: float | None = None  # asymmetric 0→1 flip (overrides bitflip_prob)
-
 
 @dataclass(frozen=True)
 class HypergraphConfig:
@@ -108,47 +97,7 @@ class HypergraphGenome:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §3  Bitstring operators
-# ═══════════════════════════════════════════════════════════════════
-
-def init_bitstring(n_features: int, cfg: BitstringConfig, rng: np.random.Generator) -> np.ndarray:
-    """Create a random binary mask with P(bit=1) = init_prob."""
-    mask = rng.random(n_features) < float(cfg.init_prob)
-    if mask.sum() == 0:
-        mask[rng.integers(0, n_features)] = True
-    return mask
-
-
-def bitstring_crossover(
-    a: np.ndarray, b: np.ndarray, rng: np.random.Generator,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Uniform crossover: each bit is independently taken from either parent."""
-    a, b = np.asarray(a, dtype=bool), np.asarray(b, dtype=bool)
-    m = rng.random(a.size) < 0.5
-    c1, c2 = np.where(m, a, b), np.where(m, b, a)
-    for c in (c1, c2):
-        if c.sum() == 0:
-            cands = np.flatnonzero(a | b)
-            idx = int(rng.choice(cands)) if cands.size else int(rng.integers(0, a.size))
-            c[idx] = True
-    return c1, c2
-
-
-def bitstring_mutate(a: np.ndarray, cfg: BitstringConfig, rng: np.random.Generator) -> np.ndarray:
-    """Bit-flip mutation with optional asymmetric probabilities."""
-    a = np.asarray(a, dtype=bool).copy()
-    p_on = float(cfg.bitflip_prob_on if cfg.bitflip_prob_on is not None else cfg.bitflip_prob)
-    p_off = float(cfg.bitflip_prob_off if cfg.bitflip_prob_off is not None else cfg.bitflip_prob)
-    r = rng.random(a.size)
-    flips = (a & (r < p_on)) | ((~a) & (r < p_off))
-    a ^= flips.astype(bool, copy=False)
-    if a.sum() == 0:
-        a[rng.integers(0, a.size)] = True
-    return a
-
-
-# ═══════════════════════════════════════════════════════════════════
-# §4  Feature–label mutual information
+# §3  Feature–label mutual information
 # ═══════════════════════════════════════════════════════════════════
 
 def compute_feature_label_mi(
@@ -273,7 +222,7 @@ def compute_feature_label_mi(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §5  MI cache
+# §4  MI cache
 # ═══════════════════════════════════════════════════════════════════
 
 def _mi_cache_key(
@@ -301,7 +250,7 @@ def _mi_cache_key(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §6  Helper array utilities
+# §5  Helper array utilities
 # ═══════════════════════════════════════════════════════════════════
 
 def _topk_per_row(values: np.ndarray, k: int) -> np.ndarray:
@@ -321,7 +270,7 @@ def _topk_1d(values: np.ndarray, k: int) -> np.ndarray:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §7  Label–label similarity graph & community detection
+# §6  Label–label similarity graph & community detection
 # ═══════════════════════════════════════════════════════════════════
 
 def build_label_label_similarity_graph(
@@ -400,7 +349,7 @@ def build_label_label_similarity_graph(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §8  Multilayer-label hyperedge construction
+# §7  Multilayer-label hyperedge construction
 # ═══════════════════════════════════════════════════════════════════
 
 def build_hyperedges_multilayer(
@@ -562,7 +511,7 @@ def build_hyperedges_multilayer(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §9  Hypergraph genome helpers
+# §8  Hypergraph genome helpers
 # ═══════════════════════════════════════════════════════════════════
 
 def init_hypergraph(
@@ -594,7 +543,7 @@ def clone_hypergraph(g: HypergraphGenome) -> HypergraphGenome:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §10  Feature–edge membership & similarity (for contraction)
+# §9  Feature–edge membership & similarity (for contraction)
 # ═══════════════════════════════════════════════════════════════════
 
 def build_feat_edge_membership(
@@ -656,7 +605,7 @@ def build_feature_similarity(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §11  Crossover
+# §10  Crossover
 # ═══════════════════════════════════════════════════════════════════
 
 def uniform_hyperedge_crossover(
@@ -682,7 +631,7 @@ def uniform_hyperedge_crossover(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §12  Composite mutation
+# §11  Composite mutation
 # ═══════════════════════════════════════════════════════════════════
 
 def hyperedge_composite_mutation(
@@ -945,7 +894,7 @@ def hyperedge_composite_mutation(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# §13  Repair operator
+# §12  Repair operator
 # ═══════════════════════════════════════════════════════════════════
 
 def repair_hypergraph(

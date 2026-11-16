@@ -3,47 +3,38 @@
 > **H-GEMO: Template-Based Hypergraph Genotypes for Multi-Objective
 > Multi-Label Feature Selection**
 
-H-GEMO is a novel **Multi-Objective Multi-Label Feature Selection (MLFS)** framework that models the feature search space using **template-based hypergraph genotypes**. 
+H-GEMO is a multi-objective framework for **multi-label feature selection
+(MLFS)**. Candidate feature subsets are encoded as **template-based
+hypergraph genotypes**: hyperedges group features that are jointly
+relevant to subsets of correlated labels, and the evolutionary operators
+recombine, mutate and repair these groups instead of individual bits.
 
-In conventional feature selection, representing subsets of features via simple bitstrings fails to capture the complex, higher-order relationships between features and multiple labels. H-GEMO represents candidate feature subsets as hypergraphs, enabling the evolutionary algorithm to guide the search process more efficiently and robustly by understanding which groups of features jointly predict subsets of labels.
+- **Hypergraph genotype:** a template of feature–label hyperedges built
+  once from mutual information and label co-occurrence; each individual
+  activates a subset of hyperedges.
+- **Multi-objective search:** NSGA-II minimises (1 − Macro-F1),
+  (1 − Micro-F1) and the fraction of selected features.
+- **ML-kNN wrapper:** fitness is computed with ML-kNN (k = 5, s = 1),
+  with an optional PyTorch/GPU implementation for fast evaluation.
 
-This repository serves as a highly optimized, fully functional, and extensible MLFS toolkit.
-
-## ✨ Key Features
-- **Hypergraph-based Evolutionary Search:** Uses hypergraph structures as genotypes to preserve, recombine, and mutate feature groups based on label correlations.
-- **Multi-Objective Optimization:** Based on NSGA-II to simultaneously maximize predictive performance (e.g., Macro F1, Micro F1) while strongly minimizing the ratio of selected features.
-- **GPU-Accelerated ML-kNN:** Features a highly optimized PyTorch implementation of the ML-kNN algorithm to drastically speed up fitness evaluations throughout the evolutionary process.
-- **Configurable & Transparent:** Easily integrates with custom datasets, natively supports various similarity metrics, and allows deep configuration via YAML files.
+This repository contains the H-GEMO implementation and one example
+dataset (**Emotions**, 5 pre-computed folds).
 
 ---
 
-## 🚀 Quick Start
+## Quick start
 
 ```bash
 # 1. Create a virtual environment and install dependencies
 bash scripts/create_venv.sh
 source .venv/bin/activate
 
-# 2. Extract the 20 benchmark datasets (~22 MB zip → ~1 GB on disk)
-bash scripts/prepare_datasets.sh
+# 2. Check the installation (add --demo for a ~10 s run on Emotions)
+bash scripts/check_bundle.sh --demo
 
-# 3. Verify the bundle is intact
-bash scripts/check_bundle.sh
-
-# 4. Run a quick smoke test (~2 min on GPU, uses Emotions)
-bash scripts/check_bundle.sh --smoke
-
-# 5. Run the full main benchmark (Table 1) on all 20 datasets
-bash scripts/launch_bench.sh
-
-# 6. Or run only on a subset of datasets:
-bash scripts/launch_bench.sh Yeast Scene Emotions
-
-# 7. Run the bitstring ablation (Table 2)
-bash scripts/launch_bitstring.sh
-
-# 8. Run all sensitivity analyses (Figs 4–6)
-bash scripts/launch_sensitivity.sh
+# 3. Run H-GEMO with the default settings on one fold of Emotions
+python -m hgemo.cli run --config configs/hgemo.yaml --fold-idx 0 \
+    --override dataset.name=Emotions logging.out_dir=runs/Emotions
 ```
 
 ## Requirements
@@ -54,174 +45,102 @@ bash scripts/launch_sensitivity.sh
 | NumPy             | ≥ 1.24   |                                  |
 | SciPy             | ≥ 1.10   |                                  |
 | scikit-learn      | ≥ 1.2    |                                  |
-| scikit-multilearn | ≥ 0.2    | For stratified label-set splits  |
+| scikit-multilearn | ≥ 0.2    | Stratified train/validation split |
 | NetworkX          | ≥ 3.0    |                                  |
 | PyYAML            | ≥ 6.0    |                                  |
 | joblib            | ≥ 1.2    |                                  |
 | PyTorch           | ≥ 2.0    | Optional: GPU-accelerated ML-kNN |
 
 Install PyTorch separately from <https://pytorch.org/get-started/>.
+Without PyTorch, ML-kNN falls back to scikit-learn on the CPU.
 
-## Dataset Preparation
+## Data format
 
-All **20 benchmark datasets** used in the paper are shipped with this
-repository as a single compressed archive:
-
-```
-data/dense_benchmark_v3/paper_datasets.zip      (~22 MB, 200 .npz files)
-```
-
-Extract them once with:
-
-```bash
-bash scripts/prepare_datasets.sh           # idempotent
-bash scripts/prepare_datasets.sh --force   # re-extract / overwrite
-```
-
-This produces the layout the loader expects:
+Datasets live under `data/<NAME>/`, one folder per cross-validation fold:
 
 ```
-data/dense_benchmark_v3/<NAME>/
+data/<NAME>/
     fold0/  trainval.npz  test.npz
-    fold1/  trainval.npz  test.npz
     ...
     fold4/  trainval.npz  test.npz
 ```
 
-Each `.npz` file stores dense arrays `X` (float32) and `Y` (int8, binary
-indicators).  The 5 folds are the exact stratified splits used to
-produce all results in the paper (same random seed, same partitions).
+Each `.npz` file stores dense arrays `X` (float32, instances × features)
+and `Y` (integer, instances × labels, binary indicators). The `trainval`
+part is split internally into training and validation sets with
+iterative stratification; `test` is used only to evaluate the final
+solutions.
 
-The **Emotions** dataset is also kept extracted in-tree so the smoke
-test can run before `prepare_datasets.sh` is invoked.
+The repository ships `data/Emotions/` (593 instances, 72 features,
+6 labels). To use your own data, create `data/<NAME>/` with the same
+layout and pass `--override dataset.name=<NAME>`.
 
-### The 20 datasets at a glance
-
-| Dataset       | #Inst. | #Feat. | #Labels | Domain      |
-|---------------|-------:|-------:|--------:|-------------|
-| Arts          |  5000  |   462  |    26   | Text        |
-| Business      |  5000  |   438  |    30   | Text        |
-| Computers     |  5000  |   681  |    33   | Text        |
-| Education     |  5000  |   550  |    33   | Text        |
-| Emotions      |   593  |    72  |     6   | Music       |
-| Enron         |  1702  |  1001  |    53   | Text        |
-| Entertain     |  5000  |   640  |    21   | Text        |
-| Foodtruck     |   407  |    32  |    12   | Survey      |
-| Genbase       |   662  |  1185  |    27   | Biology     |
-| Health        |  5000  |   612  |    32   | Text        |
-| Medical       |   978  |  1449  |    45   | Medical     |
-| Recreation    |  5000  |   606  |    22   | Text        |
-| Reference     |  5000  |   793  |    33   | Text        |
-| Scene         |  2407  |   294  |     6   | Vision      |
-| Science       |  5000  |   743  |    40   | Text        |
-| Slashdot      |  3782  |  1079  |    22   | Text        |
-| Social        |  5000  |  1047  |    39   | Text        |
-| Water-quality |  1060  |    16  |    14   | Environment |
-| Yeast         |  2417  |   103  |    14   | Biology     |
-| Yelp          | 10806  |   671  |     5   | Text        |
-
-### Adding your own datasets
-
-Place any extra dataset under `data/dense_benchmark_v3/<NAME>/` following
-the same `foldK/{trainval,test}.npz` convention, then reference it by
-name via `--override dataset.name=<NAME>` (see next section).
-
-## Running Individual Experiments
-
-Every run is launched through the same CLI; the dataset and the fold
-index are selected from the command line, so **any of the 20 datasets**
-(or any custom one you add) can be evaluated without editing a YAML
-file:
+## Running H-GEMO
 
 ```bash
-# Generic template
 python -m hgemo.cli run \
-    --config configs/main_bench.yaml \
-    --fold-idx <K>                       \  # K in {0,1,2,3,4}
-    --override dataset.name=<NAME>       \
-               logging.out_dir=runs/<my_run>
+    --config configs/hgemo.yaml \
+    --fold-idx <K> \
+    --override dataset.name=<NAME> logging.out_dir=runs/<NAME>
 ```
 
-### Examples
+Full 5-fold cross-validation:
 
 ```bash
-# 1. Single fold of a single dataset
-python -m hgemo.cli run --config configs/main_bench.yaml \
-    --fold-idx 0 --override dataset.name=Yeast \
-                            logging.out_dir=runs/manual/Yeast
-
-# 2. Five folds of one dataset (full CV) – plain bash loop
 for K in 0 1 2 3 4; do
-    python -m hgemo.cli run --config configs/main_bench.yaml \
-        --fold-idx $K --override dataset.name=Scene \
-                                logging.out_dir=runs/manual/Scene
+    python -m hgemo.cli run --config configs/hgemo.yaml --fold-idx $K \
+        --override dataset.name=Emotions logging.out_dir=runs/Emotions
 done
-
-# 3. A subset of datasets via the helper script (5 folds each)
-bash scripts/launch_bench.sh Yeast Scene Foodtruck
-
-# 4. All 20 datasets × 5 folds (full Table 1 reproduction)
-bash scripts/launch_bench.sh
-
-# 5. Same dataset, custom hyper-parameters via further overrides
-python -m hgemo.cli run --config configs/main_bench.yaml \
-    --fold-idx 0 --override dataset.name=Medical \
-                            evolution.pop_size=80 \
-                            evolution.max_evals_per_feature=50 \
-                            logging.out_dir=runs/exploration/Medical_pop80
 ```
 
-The launch scripts (`launch_bench.sh`, `launch_bitstring.sh`,
-`launch_sensitivity.sh`) are thin wrappers around the same CLI and accept
-the dataset names as positional arguments — no source code edits required.
+Any configuration value can be changed from the command line with dotted
+keys, e.g. `--override evolution.pop_size=80 model.mlknn_device=cpu`.
 
-### CLI flags
+| Flag         | Description                                          |
+|--------------|------------------------------------------------------|
+| `--config`   | YAML configuration file                              |
+| `--fold-idx` | Cross-validation fold index (0–4)                    |
+| `--override` | Dotted-key overrides (e.g. `evolution.pop_size=100`) |
 
-| Flag         | Description                                     |
-|--------------|-------------------------------------------------|
-| `--config`   | Path to a YAML config file                      |
-| `--fold-idx` | Cross-validation fold index (0–4)               |
-| `--override`  | Dotted-key overrides (e.g. `evolution.pop_size=100`) |
+### Outputs
 
-### Outputs per run
+Each run writes `<out_dir>_fold<K>/` with:
 
-Each `<out_dir>_fold<K>/` directory contains:
+| File                        | Description                                   |
+|-----------------------------|-----------------------------------------------|
+| `pareto_front.csv`          | Validation-set Pareto front (objectives)      |
+| `pareto_front_real.csv`     | Metric values (Macro-F1, Micro-F1, ratio)     |
+| `pareto_front_test.csv`     | Test-set values of the same solutions         |
+| `pareto_val_solutions.json` | Per-solution details (validation)             |
+| `test_selected_by_val.json` | Per-solution details (test)                   |
+| `summary.json`              | Run summary (HV, generations, timing, …)      |
+| `population_masks.npz`      | Binary feature masks of the Pareto solutions  |
+| `config_used.yaml`          | Exact configuration used                      |
+| `run.log`                   | Per-generation log                            |
 
-| File                      | Description                                   |
-|---------------------------|-----------------------------------------------|
-| `pareto_front.csv`        | Validation-set Pareto front (objectives)      |
-| `pareto_front_real.csv`   | Real metric values (MacroF1, MicroF1, ratio)  |
-| `pareto_front_test.csv`   | Test-set Pareto front                         |
-| `pareto_val_solutions.json` | Per-solution details (val)                  |
-| `test_selected_by_val.json` | Per-solution details (test)                 |
-| `summary.json`            | Run summary (HV, generations, timing, etc.)   |
-| `population_masks.npz`    | Binary feature masks for all Pareto solutions |
-| `config_used.yaml`        | Exact config used for this run                |
-| `run.log`                 | Detailed per-generation log                   |
+## Configuration
 
-## Configuration Reference
-
-The YAML config mirrors the paper's Table of hyperparameters.  Key sections:
+`configs/hgemo.yaml` holds the default settings; `configs/demo.yaml` is
+a tiny-budget version for a quick check. Main parameters:
 
 ```yaml
 evolution:
-  pop_size: 50               # Population size (N)
-  crossover_prob: 0.9        # Crossover probability (p_c)
-  mutation_prob: 0.5         # Mutation probability (p_m)
-  max_evals_per_feature: 100 # Budget = D × max_evals_per_feature
-  genotype: hypergraph       # or "bitstring"
+  pop_size: 50               # population size
+  crossover_prob: 0.9
+  mutation_prob: 0.5
+  max_evals_per_feature: 100 # evaluation budget = D × 100
   early_stopping:
     enabled: true
-    mode: window             # HV-window early stopping
+    mode: window             # stop when hypervolume stagnates
     window: 10
     rel_tol: 0.002
     patience: 2
 
 hypergraph:
   construction: multilayer_label
-  fl_relevance: mi
-  ll_similarity: jaccard
-  fl_topm_ratio: 0.15
+  fl_relevance: mi           # feature–label relevance
+  ll_similarity: jaccard     # label–label similarity
+  fl_topm_ratio: 0.15        # fraction of features per label hyperedge
   fl_topm_min: 3
   init_edge_prob: 0.3
   edge_prune_prob: 0.1
@@ -234,56 +153,28 @@ hypergraph:
   feature_cluster_edges: auto
 ```
 
-## Reproducing Paper Tables and Figures
-
-| Paper element                          | Config                              | Script                        |
-|----------------------------------------|-------------------------------------|-------------------------------|
-| Multi-cap rank plot (fig:multicap_ranks) | `configs/main_bench.yaml`           | `scripts/launch_bench.sh`     |
-| HV convergence (fig:hv_convergence)    | `configs/main_bench.yaml` + `configs/bitstring_ablation.yaml` | both launch scripts |
-| Cap-sweep (fig:cap_sweep)              | `configs/main_bench.yaml` + `configs/bitstring_ablation.yaml` | both launch scripts |
-| Sensitivity (fig:sensitivity)          | `configs/sensitivity/*.yaml`        | `scripts/launch_sensitivity.sh` |
-| Bitstring ablation                     | `configs/bitstring_ablation.yaml`   | `scripts/launch_bitstring.sh` |
-
-## Code Structure
+## Code structure
 
 ```
-repro_paper_runs/
-├── hgemo/                  # Source code (13 files, ~2 800 lines)
-│   ├── cli.py              # CLI entry point
-│   ├── config.py           # Config loading
-│   ├── datasets.py         # Dataset I/O
-│   ├── experiment.py       # Main experiment loop
-│   ├── genotypes.py        # Hypergraph + bitstring genotypes
-│   ├── metrics.py          # Multi-label metrics + HV
-│   ├── ml_eval.py          # ML-kNN evaluator
-│   ├── mlknn_impl.py       # ML-kNN implementation
-│   ├── nsga2.py            # NSGA-II engine
-│   └── …                   # Utilities
-├── configs/                # YAML configs (17 files)
-│   ├── main_bench.yaml
-│   ├── bitstring_ablation.yaml
-│   ├── smoke.yaml
-│   └── sensitivity/        # 14 sensitivity variants
-├── scripts/                # Shell launch scripts
-│   ├── prepare_datasets.sh # Extract paper_datasets.zip
-│   ├── create_venv.sh
-│   ├── check_bundle.sh
-│   ├── launch_bench.sh
-│   ├── launch_bitstring.sh
-│   └── launch_sensitivity.sh
-├── data/                   # Datasets
-│   └── dense_benchmark_v3/
-│       ├── paper_datasets.zip   # 20 datasets, ~22 MB (extract with prepare_datasets.sh)
-│       └── Emotions/            # pre-extracted for the smoke test
-├── requirements.txt
-├── pyproject.toml
-├── MANIFEST.md
-└── README.md               # This file
+hgemo/
+├── cli.py            # command-line entry point
+├── config.py         # YAML loading and dotted-key overrides
+├── datasets.py       # dataset loading and train/validation split
+├── experiment.py     # main loop for one fold
+├── genotypes.py      # hypergraph template, genome, crossover, mutation, repair
+├── metrics.py        # multi-label metrics, Pareto dominance, hypervolume
+├── ml_eval.py        # ML-kNN fitness evaluator
+├── mlknn_impl.py     # ML-kNN (PyTorch and scikit-learn backends)
+├── nsga2.py          # NSGA-II engine
+└── …                 # utilities
+configs/              # hgemo.yaml (default), demo.yaml (quick check)
+scripts/              # create_venv.sh, check_bundle.sh
+data/Emotions/        # example dataset (5 folds)
 ```
 
 ## License
 
-MIT License.  See the main repository for full terms.
+MIT License.
 
 ## Citation
 

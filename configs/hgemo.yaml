@@ -1,10 +1,14 @@
-# Smoke test — runs in a few seconds (tiny budget, 1 fold, small dataset).
+# H-GEMO default configuration (settings used in the paper).
+#
+# Usage:
+#   python -m hgemo.cli run --config configs/hgemo.yaml --fold-idx 0 \
+#       --override dataset.name=Emotions logging.out_dir=runs/Emotions
 seed: 42
 
 dataset:
   kind: prefold
-  root: data/dense_benchmark_v3
-  name: Emotions
+  root: data
+  name: Emotions          # ← override per dataset
 
 cross_validation:
   enabled: true
@@ -14,17 +18,21 @@ model:
   kind: mlknn
   k: 5
   s: 1.0
-  mlknn_backend: auto
-  mlknn_device: auto
+  mlknn_backend: auto        # torch if available, else scikit-learn
+  mlknn_device: auto         # cuda if available, else cpu
 
 evolution:
-  pop_size: 10
+  pop_size: 50
   crossover_prob: 0.9
   mutation_prob: 0.5
-  max_evals: 200
+  max_evals_per_feature: 100
   genotype: hypergraph
   early_stopping:
-    enabled: false
+    enabled: true
+    mode: window
+    window: 10
+    rel_tol: 0.002
+    patience: 2
 
 objectives:
   names:
@@ -41,6 +49,7 @@ hypergraph:
   target_feature_ratio: 0.25
   min_feature_ratio: 0.03
   fl_relevance: mi
+  ll_similarity: jaccard
   init_edge_prob: 0.3
   edge_prune_prob: 0.1
   injection_prob: 0.3
@@ -52,7 +61,7 @@ hypergraph:
   mutation_routing_inject: 0.20
 
 logging:
-  out_dir: runs/repro/smoke
+  out_dir: runs/hgemo
 
 reporting:
   budget_mode: count
