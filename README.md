@@ -9,9 +9,9 @@ hypergraph genotypes**: hyperedges group features that are jointly
 relevant to subsets of correlated labels, and the evolutionary operators
 recombine, mutate and repair these groups instead of individual bits.
 
-- **Hypergraph genotype:** a template of feature–label hyperedges built
-  once from mutual information and label co-occurrence; each individual
-  activates a subset of hyperedges.
+- **Hypergraph genotype:** a fixed template containing label-centred
+  hyperedges derived from mutual information and feature-cluster hyperedges;
+  each individual activates and refines a subset of these groups.
 - **Multi-objective search:** NSGA-II minimises (1 − Macro-F1),
   (1 − Micro-F1) and the fraction of selected features.
 - **ML-kNN wrapper:** fitness is computed with ML-kNN (k = 5, s = 1),
@@ -140,8 +140,10 @@ hypergraph:
   construction: multilayer_label
   fl_relevance: mi           # feature–label relevance
   ll_similarity: jaccard     # label–label similarity
+  fl_topk_labels_per_feature: 8 # mutual-filter rank per feature
   fl_topm_ratio: 0.15        # fraction of features per label hyperedge
-  fl_topm_min: 3
+  fl_topm_min: 3             # minimum candidate-set size
+  fl_mutual_floor: 3         # candidates always retained per label
   init_edge_prob: 0.3
   edge_prune_prob: 0.1
   injection_prob: 0.3

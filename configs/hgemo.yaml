@@ -55,8 +55,10 @@ hypergraph:
   injection_prob: 0.3
   feature_cluster_edges: auto
   graph_contraction_threshold: 0.70
+  fl_topk_labels_per_feature: 8
   fl_topm_ratio: 0.15
   fl_topm_min: 3
+  fl_mutual_floor: 3
   mutation_routing_swap: 0.40
   mutation_routing_inject: 0.20
 

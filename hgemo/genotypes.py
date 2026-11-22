@@ -46,6 +46,9 @@ class HypergraphConfig:
     fl_topk_labels_per_feature: int = 8
     fl_topm_ratio: float = 0.15       # fraction of D kept per label edge
     fl_topm_min: int = 3              # minimum features per label edge
+    # First ``fl_mutual_floor`` candidates of every label are always kept.
+    # None means: use ``fl_topm_min``.
+    fl_mutual_floor: int | None = None
 
     # ── Label–label similarity ────────────────────────────────────
     ll_similarity: str = "jaccard"    # jaccard | cosine
@@ -269,6 +272,45 @@ def _topk_1d(values: np.ndarray, k: int) -> np.ndarray:
     return idx[np.argsort(-values[idx])]
 
 
+def mutual_label_features(mi: np.ndarray, *, k: int, topm: int, floor: int) -> list[np.ndarray]:
+    """Construct label-centred feature sets using mutual sparsification.
+
+    For each label, start from its ``topm`` features. A candidate feature is
+    retained when its relevance is positive and fewer than ``k`` labels have
+    strictly greater relevance for that feature. Labels tied at the top-k
+    boundary are therefore all retained. The first ``floor`` candidates of
+    every label are always kept so that no label-centred edge is empty.
+    """
+    from scipy.stats import rankdata
+
+    mi = np.asarray(mi)
+    if mi.ndim != 2:
+        raise ValueError("mi must be 2D [n_features, n_labels]")
+    n_features, n_labels = mi.shape
+    k = int(k)
+    topm = int(min(max(1, int(topm)), n_features))
+    floor = int(min(max(1, int(floor)), topm))
+    if k <= 0:
+        raise ValueError("k must be > 0")
+    if n_labels == 0:
+        return []
+
+    # Number of labels with strictly greater relevance for each pair.
+    labels_above = rankdata(
+        -mi.astype(np.float64, copy=False), method="min", axis=1,
+    ).astype(np.int64) - 1
+    feature_index = np.arange(n_features)
+    out: list[np.ndarray] = []
+    for label in range(n_labels):
+        candidates = np.lexsort(
+            (feature_index, -mi[:, label].astype(np.float64, copy=False)),
+        )[:topm]
+        keep = (labels_above[candidates, label] < k) & (mi[candidates, label] > 0)
+        keep[:floor] = True
+        out.append(candidates[keep].astype(int, copy=False))
+    return out
+
+
 # ═══════════════════════════════════════════════════════════════════
 # §6  Label–label similarity graph & community detection
 # ═══════════════════════════════════════════════════════════════════
@@ -286,8 +328,8 @@ def build_label_label_similarity_graph(
     * ``jaccard``:  J(L_i,L_j) = |L_i∩L_j| / |L_i∪L_j|
     * ``cosine``:   cos(L_i,L_j) = |L_i∩L_j| / sqrt(|L_i|·|L_j|)
 
-    Communities are detected with Louvain (fallback: greedy modularity)
-    and used for community-preserving crossover.
+    Communities are detected with Louvain (fallback: greedy modularity) and
+    returned for optional extensions; default crossover does not use them.
     """
     y = y.tocsr()
     n_labels = y.shape[1]
@@ -366,10 +408,11 @@ def build_hyperedges_multilayer(
 
     Steps:
     1. Compute feature–label MI (or load from cache).
-    2. Sparsify via top-k labels per feature + top-m features per label.
+    2. Apply mutual sparsification: top-m candidates per label, filtered by
+       the feature's top-k labels, with a per-label floor.
     3. Build one hyperedge per label.
     4. (Optionally) add KMeans feature-cluster edges.
-    5. Detect label communities for crossover.
+    5. Detect label communities for optional extensions.
 
     Returns ``(edges, label_communities, None)``.
     """
@@ -425,20 +468,15 @@ def build_hyperedges_multilayer(
                 pass
 
     # ── Step 2: Sparsify ──────────────────────────────────────────
-    topk_labels = _topk_per_row(mi, k=cfg.fl_topk_labels_per_feature)
     topm = max(int(cfg.fl_topm_min), int(np.floor(cfg.fl_topm_ratio * n_features)))
     topm = min(topm, n_features)
-
-    topm_feats_per_label: list[np.ndarray] = []
-    for l in range(n_labels):
-        topm_feats_per_label.append(_topk_1d(mi[:, l], k=topm).astype(int))
-
-    features_for_label: list[set[int]] = [
-        set(map(int, topm_feats_per_label[l].tolist())) for l in range(n_labels)
-    ]
-    for f in range(n_features):
-        for l in topk_labels[f]:
-            features_for_label[int(l)].add(int(f))
+    floor = cfg.fl_topm_min if cfg.fl_mutual_floor is None else cfg.fl_mutual_floor
+    features_for_label = mutual_label_features(
+        mi,
+        k=cfg.fl_topk_labels_per_feature,
+        topm=topm,
+        floor=floor,
+    )
 
     # ── Step 3: Label communities ─────────────────────────────────
     _, label_communities = build_label_label_similarity_graph(
@@ -449,13 +487,7 @@ def build_hyperedges_multilayer(
     # ── Step 4: One hyperedge per label ───────────────────────────
     edges: list[Hyperedge] = []
     for l in range(n_labels):
-        feats = np.fromiter(features_for_label[l], dtype=int)
-        if feats.size == 0:
-            feats = topm_feats_per_label[l][:1].copy()
-        if feats.size > topm:
-            scores_all = mi[feats, l]
-            keep_idx = _topk_1d(scores_all, k=topm)
-            feats = feats[keep_idx]
+        feats = features_for_label[l].copy()
         scores = mi[feats, l].astype(np.float32)
         edges.append(Hyperedge(labels=np.array([l], dtype=int),
                                features=feats.astype(int), scores=scores))

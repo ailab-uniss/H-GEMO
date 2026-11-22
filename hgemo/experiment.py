@@ -222,6 +222,8 @@ def run_experiment_from_config(config: dict[str, Any], fold_idx: int | None = No
             fl_topk_labels_per_feature=int(get(config, "hypergraph.fl_topk_labels_per_feature", 8)),
             fl_topm_ratio=float(get(config, "hypergraph.fl_topm_ratio", 0.15)),
             fl_topm_min=int(get(config, "hypergraph.fl_topm_min", 3)),
+            fl_mutual_floor=(None if get(config, "hypergraph.fl_mutual_floor", None) is None
+                             else int(get(config, "hypergraph.fl_mutual_floor", None))),
             ll_similarity=str(get(config, "hypergraph.ll_similarity", "jaccard")),
             ll_topk=int(get(config, "hypergraph.ll_topk", 30)),
             ll_min_cooccurrence=int(get(config, "hypergraph.ll_min_cooccurrence", 1)),
