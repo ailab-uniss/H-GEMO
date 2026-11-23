@@ -5,7 +5,7 @@
 1. Load pre-folded dataset (train / val / test).
 2. Build the ML-kNN evaluator with tri-objective scoring.
 3. Construct the hypergraph template.
-4. Run NSGA-II with sliding-window early stopping on HV.
+4. Run NSGA-II with sliding-window early stopping on the additive proxy.
 5. Save Pareto front, population masks, and test-set metrics.
 
 The function is called by ``hgemo.cli.run`` for each fold.
@@ -36,7 +36,12 @@ from .genotypes import (
     init_hypergraph,
     build_hyperedges_multilayer,
 )
-from .metrics import hypervolume_3d, pareto_nondominated, pareto_nondominated_mask
+from .metrics import (
+    additive_front_proxy,
+    hypervolume_exact,
+    pareto_nondominated,
+    pareto_nondominated_mask,
+)
 from .ml_eval import EvalConfig, Evaluator
 from .nsga2 import Variation, nsga2
 from .utils import JsonlLogger
@@ -57,6 +62,11 @@ _P95_NULL: list[tuple[int, float]] = [
     (30, 0.696), (35, 0.682), (40, 0.671), (45, 0.660),
     (50, 0.653), (60, 0.640), (80, 0.624), (100, 0.613),
 ]
+
+_PAPER_PROXY_AND_Q_DATASETS = {
+    "arts", "education", "foodtruck", "health", "recreation",
+    "reference", "science", "social", "yelp",
+}
 
 
 def _p95_null_cosine(n_labels: int) -> float:
@@ -174,7 +184,10 @@ def run_experiment_from_config(config: dict[str, Any], fold_idx: int | None = No
     log.info("run.start out_dir=%s seed=%s fold_idx=%s", paths.out_dir, seed, fold_idx)
 
     # ── Load dataset ──────────────────────────────────────────────
-    ds = load_dataset(config, seed=seed, fold_idx=fold_idx)
+    # Keep the inner train/validation partition fixed when the search seed is
+    # varied, as in the independent-run analyses reported in the paper.
+    split_seed = int(get(config, "dataset.split_seed", seed))
+    ds = load_dataset(config, seed=split_seed, fold_idx=fold_idx)
     n_features = ds.x_train.shape[1]
     n_labels = ds.y_train.shape[1]
     log.info("dataset x_train=%s y_train=%s x_val=%s y_val=%s",
@@ -286,48 +299,97 @@ def run_experiment_from_config(config: dict[str, Any], fold_idx: int | None = No
                       "feature_ratio": float(mask.sum() / mask.size),
                       "ml": asdict(ml)}
 
-    # ── Early stopping (sliding-window on HV) ─────────────────────
+    # ── Early stopping (sliding windows on the additive proxy / q) ─
     n_obj = len(objective_names) if objective_names else 2
     ref_list = [float(get(config, f"objectives.hv_ref.{i}", 1.0)) for i in range(n_obj)]
     ref = tuple(ref_list)
 
     es_cfg = evo_cfg.get("early_stopping", {})
     es_enabled = bool(es_cfg.get("enabled", True))
+    es_mode = str(es_cfg.get("mode", "paper")).strip().lower()
+    if es_mode == "paper":
+        dataset_name = str(get(config, "dataset.name", "")).strip().lower()
+        es_mode = "both_gm" if dataset_name in _PAPER_PROXY_AND_Q_DATASETS else "window"
+    if es_mode not in {"window", "both_gm"}:
+        raise ValueError("early_stopping.mode must be 'paper', 'window', or 'both_gm'")
     es_window = int(es_cfg.get("window", 10))
     es_rel_tol = float(es_cfg.get("rel_tol", 0.002))
     es_patience = int(es_cfg.get("patience", 2))
 
-    hv_history: list[float] = []
-    stagnant_count = 0
+    proxy_history: list[float] = []
+    q_history: list[float] = []
+    proxy_stagnant_count = 0
+    q_stagnant_count = 0
     last_gen = -1
 
+    macro_idx = objective_names.index("one_minus_macro_f1")
+    micro_idx = objective_names.index("one_minus_micro_f1")
+    feature_idx = objective_names.index("feature_ratio")
+
+    def _update_stagnation(history: list[float], value: float, count: int) -> tuple[int, float]:
+        history.append(value)
+        if len(history) < 2 * es_window:
+            return count, float("nan")
+        previous = float(np.mean(history[-(2 * es_window):-es_window]))
+        current = float(np.mean(history[-es_window:]))
+        relative_gain = (current - previous) / max(abs(previous), 1e-12)
+        return (count + 1 if relative_gain < es_rel_tol else 0), relative_gain
+
     def on_generation(gen: int, pop: list[Any]) -> bool | None:
-        nonlocal last_gen, stagnant_count
+        nonlocal last_gen, proxy_stagnant_count, q_stagnant_count
         last_gen = gen
 
         objs = np.stack([p.objectives for p in pop], axis=0)
         nd = pareto_nondominated(objs)
-        hv = hypervolume_3d(nd, ref=ref) if n_obj == 3 else float(np.prod(np.array(ref[:2]) - nd.min(axis=0)))
+        proxy = additive_front_proxy(nd, ref=ref)
+        max_macro_f1 = float(1.0 - nd[:, macro_idx].min())
+        max_micro_f1 = float(1.0 - nd[:, micro_idx].min())
+        mean_feature_ratio = float(nd[:, feature_idx].mean())
+        q_value = float((
+            max(max_macro_f1, 1e-12)
+            * max(max_micro_f1, 1e-12)
+            * max(1.0 - mean_feature_ratio, 1e-12)
+        ) ** (1.0 / 3.0))
 
         stop = False
         if es_enabled:
-            hv_history.append(hv)
-            if len(hv_history) >= 2 * es_window:
-                prev_w = np.mean(hv_history[-(2 * es_window):-es_window])
-                curr_w = np.mean(hv_history[-es_window:])
-                rel = (curr_w - prev_w) / max(abs(prev_w), 1e-12)
-                if rel < es_rel_tol:
-                    stagnant_count += 1
-                else:
-                    stagnant_count = 0
-                if stagnant_count >= es_patience:
-                    log.info("Early stopping at gen=%d (HV stagnant for %d checks)", gen, es_patience)
-                    stop = True
+            proxy_stagnant_count, proxy_rel = _update_stagnation(
+                proxy_history, proxy, proxy_stagnant_count)
+            proxy_stagnant = proxy_stagnant_count >= es_patience
 
-        log.info("gen=%d hv=%.6f nd=%d evals=%d wait=%d/%d",
-                 gen, hv, nd.shape[0], counts["real"], stagnant_count, es_patience)
-        logger.log({"gen": gen, "hv": hv, "n_nd": nd.shape[0], "evals": counts["real"],
-                     "stagnant": stagnant_count})
+            q_rel = float("nan")
+            q_stagnant = False
+            if es_mode == "both_gm":
+                q_stagnant_count, q_rel = _update_stagnation(
+                    q_history, q_value, q_stagnant_count)
+                q_stagnant = q_stagnant_count >= es_patience
+
+            stop = proxy_stagnant and (es_mode == "window" or q_stagnant)
+            if stop:
+                log.info(
+                    "Early stopping at gen=%d (mode=%s, proxy_wait=%d, q_wait=%d)",
+                    gen, es_mode, proxy_stagnant_count, q_stagnant_count,
+                )
+        else:
+            proxy_rel = q_rel = float("nan")
+
+        log.info(
+            "gen=%d proxy=%.6f q=%.6f nd=%d evals=%d wait=%d/%d q_wait=%d/%d",
+            gen, proxy, q_value, nd.shape[0], counts["real"],
+            proxy_stagnant_count, es_patience, q_stagnant_count, es_patience,
+        )
+        logger.log({
+            "gen": gen,
+            "indicator_proxy": proxy,
+            "q": q_value,
+            "n_nd": nd.shape[0],
+            "evals": counts["real"],
+            "proxy_relative_gain": proxy_rel,
+            "q_relative_gain": q_rel,
+            "proxy_stagnant": proxy_stagnant_count,
+            "q_stagnant": q_stagnant_count,
+            "early_stopping_mode": es_mode,
+        })
         return stop
 
     # ── Budget ────────────────────────────────────────────────────
@@ -461,10 +523,10 @@ def run_experiment_from_config(config: dict[str, Any], fold_idx: int | None = No
     }, indent=2))
 
     # Summary.
-    hv_val = hypervolume_3d(nd_val, ref=ref) if n_obj == 3 else 0.0
-    hv_test = hypervolume_3d(nd_test, ref=ref) if n_obj == 3 else 0.0
+    hv_val = hypervolume_exact(nd_val, ref=ref)
+    hv_test = hypervolume_exact(nd_test, ref=ref)
     (paths.out_dir / "summary.json").write_text(json.dumps({
-        "seed": seed, "fold_idx": fold_idx,
+        "seed": seed, "split_seed": split_seed, "fold_idx": fold_idx,
         "dataset": config.get("dataset", {}),
         "evolution": config.get("evolution", {}),
         "final": {

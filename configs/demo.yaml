@@ -5,6 +5,7 @@ dataset:
   kind: prefold
   root: data
   name: Emotions
+  split_seed: 42
 
 cross_validation:
   enabled: true
@@ -41,9 +42,11 @@ hypergraph:
   target_feature_ratio: 0.25
   min_feature_ratio: 0.03
   fl_relevance: mi
-  init_edge_prob: 0.3
+  fl_mi_estimator: auto
+  init_edge_prob: auto
   edge_prune_prob: 0.1
-  injection_prob: 0.3
+  edge_toggle_prob: 0.5
+  injection_k: 1
   feature_cluster_edges: auto
   graph_contraction_threshold: 0.70
   fl_topk_labels_per_feature: 8

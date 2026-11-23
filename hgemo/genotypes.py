@@ -57,7 +57,9 @@ class HypergraphConfig:
 
     # ── Hypergraph init / structure ───────────────────────────────
     topk_per_label: int = 30
-    init_edge_prob: float = 0.3       # can also be "auto"
+    # Resolved numeric value; the benchmark YAML uses "auto" and resolves it
+    # from D before constructing this dataclass.
+    init_edge_prob: float = 0.3
     graph_contraction_threshold: float | str = 0.7   # or "auto"
     edge_prune_prob: float = 0.05
     target_feature_ratio: float | None = None
@@ -121,22 +123,16 @@ def compute_feature_label_mi(
     * ``sklearn_discrete`` — ``mutual_info_classif`` with ``discrete_features=True``.
     * ``sklearn_knn`` — ``mutual_info_classif`` with kNN estimator.
 
-    ``"auto"`` selects ``binary_discrete`` for sparse binary-like data,
-    ``sklearn_discrete`` for high-dimensional sparse data, and
-    ``sklearn_knn`` otherwise.
+    ``"auto"`` implements the deterministic policy described in the paper:
+    if at least 25% of features have occupancy below 0.5, use presence/absence
+    contingency counts; otherwise use the observed feature values as discrete
+    categories. The continuous kNN estimator remains available explicitly for
+    sensitivity experiments, but is not part of the reported default policy.
     """
     x = x.tocsr()
     y = y.tocsr()
 
     # ── Auto-selection heuristic ──────────────────────────────────
-
-    def _looks_binary_sparse(x_csr: sparse.csr_matrix) -> bool:
-        d = x_csr.data
-        if d.size == 0:
-            return True
-        if float(d.min()) < 0.0 or float(d.max()) > 1.0:
-            return False
-        return bool(np.allclose(d[: min(50_000, d.size)], 1.0))
 
     def _resolve_estimator(x_csr: sparse.csr_matrix, est_in: str) -> str:
         est = str(est_in).strip().lower()
@@ -149,9 +145,7 @@ def compute_feature_label_mi(
                 frac_nz = col_nnz / float(max(1, n_s))
                 if float(np.mean(frac_nz < 0.5)) >= 0.25:
                     return "binary_discrete"
-            if x_csr.shape[1] >= 2000:
-                return "binary_discrete" if _looks_binary_sparse(x_csr) else "sklearn_discrete"
-        return "sklearn_knn"
+        return "sklearn_discrete"
 
     # ── Binary-discrete MI (fast, sparse-friendly) ────────────────
 
@@ -207,12 +201,23 @@ def compute_feature_label_mi(
     if est == "sklearn_discrete":
         discrete_features = True
         n_neighbors = 3
+        x_for_mi: sparse.csr_matrix | np.ndarray = x
+    elif est == "sklearn_knn":
+        # scikit-learn treats every sparse input as discrete. Densifying and
+        # setting this flag explicitly is therefore necessary for the genuine
+        # continuous-variable kNN estimator used in the sensitivity analysis.
+        discrete_features = False
+        x_for_mi = x.toarray()
+    else:
+        raise ValueError(f"Unsupported MI estimator: {est!r}")
 
     def _mi_one_label_sklearn(l: int) -> np.ndarray:
+        if np.unique(y_dense[:, l]).size < 2:
+            return np.zeros(n_features, dtype=np.float32)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
             return mutual_info_classif(
-                x, y_dense[:, l],
+                x_for_mi, y_dense[:, l],
                 n_neighbors=int(n_neighbors),
                 discrete_features=discrete_features,
                 random_state=seed,
@@ -433,14 +438,8 @@ def build_hyperedges_multilayer(
         frac_sparse = float(np.mean(frac_nz < 0.5))
         if frac_sparse >= 0.25:
             est_resolved = "binary_discrete"
-        elif x.shape[1] >= 2000:
-            d = x.data
-            looks_binary = (d.size == 0 or
-                            (float(d.min()) >= 0.0 and float(d.max()) <= 1.0 and
-                             bool(np.allclose(d[: min(50_000, d.size)], 1.0))))
-            est_resolved = "binary_discrete" if looks_binary else "sklearn_discrete"
         else:
-            est_resolved = "sklearn_knn"
+            est_resolved = "sklearn_discrete"
 
     if cfg.fl_mi_cache and cache_dir:
         from pathlib import Path as _P

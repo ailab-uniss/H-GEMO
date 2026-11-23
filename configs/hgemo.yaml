@@ -1,4 +1,4 @@
-# H-GEMO default configuration (settings used in the paper).
+# H-GEMO configuration matching the benchmark protocol in the paper.
 #
 # Usage:
 #   python -m hgemo.cli run --config configs/hgemo.yaml --fold-idx 0 \
@@ -9,6 +9,7 @@ dataset:
   kind: prefold
   root: data
   name: Emotions          # ← override per dataset
+  split_seed: 42          # fixed inner partition when search seed changes
 
 cross_validation:
   enabled: true
@@ -29,7 +30,9 @@ evolution:
   genotype: hypergraph
   early_stopping:
     enabled: true
-    mode: window
+    # "paper" uses proxy+q on the nine datasets listed in the manuscript
+    # and the proxy-only window rule on all other datasets.
+    mode: paper
     window: 10
     rel_tol: 0.002
     patience: 2
@@ -49,10 +52,12 @@ hypergraph:
   target_feature_ratio: 0.25
   min_feature_ratio: 0.03
   fl_relevance: mi
+  fl_mi_estimator: auto
   ll_similarity: jaccard
-  init_edge_prob: 0.3
+  init_edge_prob: auto
   edge_prune_prob: 0.1
-  injection_prob: 0.3
+  edge_toggle_prob: 0.5
+  injection_k: 1
   feature_cluster_edges: auto
   graph_contraction_threshold: 0.70
   fl_topk_labels_per_feature: 8

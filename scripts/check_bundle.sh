@@ -13,6 +13,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT_DIR"
 
+if command -v python >/dev/null 2>&1; then
+    PYTHON_BIN=python
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+else
+    echo "Python 3 was not found on PATH." >&2
+    exit 1
+fi
+
 PASS=0
 FAIL=0
 ok()   { echo "  ✓ $1"; PASS=$(( PASS + 1 )); }
@@ -21,17 +30,17 @@ fail() { echo "  ✗ $1"; FAIL=$(( FAIL + 1 )); }
 echo "[1/3] Python imports…"
 for mod in hgemo.config hgemo.cli hgemo.datasets hgemo.metrics hgemo.nsga2 \
            hgemo.mlknn_impl hgemo.genotypes hgemo.ml_eval hgemo.experiment; do
-    if python -c "import $mod" 2>/dev/null; then ok "import $mod"; else fail "import $mod"; fi
+    if "$PYTHON_BIN" -c "import $mod" 2>/dev/null; then ok "import $mod"; else fail "import $mod"; fi
 done
 
 echo "[2/3] YAML configs…"
 for cfg in configs/*.yaml; do
-    if python -c "import yaml; yaml.safe_load(open('$cfg'))" 2>/dev/null; then ok "$cfg"; else fail "$cfg"; fi
+    if "$PYTHON_BIN" -c "import yaml; yaml.safe_load(open('$cfg'))" 2>/dev/null; then ok "$cfg"; else fail "$cfg"; fi
 done
 
 if [[ "${1:-}" == "--demo" ]]; then
     echo "[3/3] Demo run (Emotions, fold 0)…"
-    if python -m hgemo.cli run --config configs/demo.yaml --fold-idx 0; then
+    if "$PYTHON_BIN" -m hgemo.cli run --config configs/demo.yaml --fold-idx 0; then
         ok "demo run"
     else
         fail "demo run"

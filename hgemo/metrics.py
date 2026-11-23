@@ -8,7 +8,8 @@ Computes the standard metrics reported in the paper:
   - One-Error
   - Subset 0/1 Loss
 
-Also includes Pareto-front utilities (non-dominated sorting, hypervolume).
+Also includes Pareto-front utilities, the additive indicator used for early
+stopping, and exact dominated hypervolume for reporting.
 """
 from __future__ import annotations
 
@@ -99,28 +100,58 @@ def pareto_nondominated_mask(points: np.ndarray) -> np.ndarray:
     return is_nd
 
 
-def hypervolume_3d(
-    points: np.ndarray,
-    ref: tuple[float, float, float],
-) -> float:
-    """Approximate 3-D hypervolume (sum of dominated boxes).
+def additive_front_proxy(points: np.ndarray, ref: tuple[float, ...]) -> float:
+    """Additive front-improvement proxy used only for early stopping.
 
-    Exact for well-separated fronts; used for early-stopping and
-    convergence logging rather than for definitive Pareto comparisons.
+    This is Eq. (11) of the revised paper: the dominated box volume of each
+    non-dominated point is summed independently. Overlaps are deliberately
+    counted more than once, so this quantity is *not* hypervolume.
     """
     pts = np.asarray(points, dtype=float)
     if pts.size == 0:
         return 0.0
     pts = pareto_nondominated(pts)
-    r0, r1, r2 = float(ref[0]), float(ref[1]), float(ref[2])
-    pts = pts[(pts[:, 0] < r0) & (pts[:, 1] < r1) & (pts[:, 2] < r2)]
+    reference = np.asarray(ref, dtype=float)
+    if pts.ndim != 2 or pts.shape[1] != reference.size:
+        raise ValueError("points and reference point must have the same dimension")
+    pts = pts[np.all(pts < reference, axis=1)]
     if pts.size == 0:
         return 0.0
-    hv = 0.0
-    for p in pts:
-        hv += (
-            max(0.0, r0 - p[0])
-            * max(0.0, r1 - p[1])
-            * max(0.0, r2 - p[2])
-        )
-    return float(hv)
+    return float(np.prod(reference - pts, axis=1).sum())
+
+
+def hypervolume_exact(points: np.ndarray, ref: tuple[float, ...]) -> float:
+    """Exact dominated hypervolume for two or three minimisation objectives."""
+    pts = np.asarray(points, dtype=float)
+    if pts.size == 0:
+        return 0.0
+    reference = np.asarray(ref, dtype=float)
+    if pts.ndim != 2 or pts.shape[1] != reference.size:
+        raise ValueError("points and reference point must have the same dimension")
+    pts = pts[np.all(pts < reference, axis=1)]
+    if pts.size == 0:
+        return 0.0
+    pts = pareto_nondominated(np.unique(pts, axis=0))
+
+    def hv2(points_2d: np.ndarray, ref_2d: np.ndarray) -> float:
+        order = np.argsort(points_2d[:, 0], kind="stable")
+        area, best_y = 0.0, float(ref_2d[1])
+        for x, y in points_2d[order]:
+            if y < best_y:
+                area += (float(ref_2d[0]) - x) * (best_y - y)
+                best_y = float(y)
+        return float(area)
+
+    if reference.size == 2:
+        return hv2(pts, reference)
+    if reference.size != 3:
+        raise ValueError("hypervolume_exact supports two or three objectives")
+
+    pts = pts[np.argsort(pts[:, 2], kind="stable")]
+    z_limits = np.append(pts[:, 2], reference[2])
+    volume = 0.0
+    for i in range(pts.shape[0]):
+        dz = float(z_limits[i + 1] - z_limits[i])
+        if dz > 0:
+            volume += hv2(pts[: i + 1, :2], reference[:2]) * dz
+    return float(volume)
